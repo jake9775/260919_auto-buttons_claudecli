@@ -1,0 +1,5 @@
+config.json
+ref_*.png
+watcher.log
+__pycache__/
+.omc/
