@@ -57,7 +57,7 @@ def dry_run(cfg, soldout_tpl, anchor_tpl):
 
 def wait_before_next_f5(cfg, round_no):
     wait = core.pick_wait(cfg)
-    say(f"#{round_no} {wait:.0f}초 뒤 다시 F5")
+    say(f"#{round_no} {wait:.3f}초 뒤 다시 F5")
     core.interruptible_sleep(wait)
 
 
