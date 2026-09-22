@@ -9,13 +9,11 @@ import pyautogui
 import core
 
 
-def countdown(message, seconds=6):
+def wait_for_enter(message):
     print(f"\n{message}")
-    for s in range(seconds, 0, -1):
-        print(f"  {s}초 뒤에 마우스 위치를 기록합니다...", end="\r")
-        time.sleep(1)
+    input("  위치를 맞춘 뒤 (마우스는 그대로 두고) Enter를 누르세요: ")
     pos = pyautogui.position()
-    print(f"  기록됨: x={pos.x}, y={pos.y}            ")
+    print(f"  기록됨: x={pos.x}, y={pos.y}")
     return pos.x, pos.y
 
 
@@ -23,8 +21,8 @@ def pick_region(name, hint):
     print(f"\n===== [{name}] 지정 =====")
     print(hint)
     while True:
-        x1, y1 = countdown("마우스를 사각형의 '왼쪽 위 모서리'에 올려두세요.")
-        x2, y2 = countdown("이번에는 '오른쪽 아래 모서리'에 올려두세요.")
+        x1, y1 = wait_for_enter("마우스를 사각형의 '왼쪽 위 모서리'에 올려두세요.")
+        x2, y2 = wait_for_enter("이번에는 '오른쪽 아래 모서리'에 올려두세요.")
         left, top = min(x1, x2), min(y1, y2)
         width, height = abs(x2 - x1), abs(y2 - y1)
         if width >= 5 and height >= 5:
