@@ -80,6 +80,11 @@ def capture_templates(cfg):
 def main():
     cfg = core.load_config()
 
+    if "--telegram" in sys.argv:
+        if setup_telegram(cfg):
+            core.save_config(cfg)
+        return
+
     if "--reserve-click" in sys.argv:
         print("[안내] '예약' 버튼이 보이도록 크롬을 준비하세요.")
         print("       (검은 창이 그 위치를 가리지 않게 구석으로 옮겨 두세요.)")
