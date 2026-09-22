@@ -18,7 +18,7 @@
 5. 방금 만든 봇을 검색해서 들어가 **"안녕"** 이라고 메시지 보내기
 
 > 텔레그램 연결만 먼저 따로 해두고 싶다면(마우스로 영역 지정하는 단계 없이):
-> `python setup_capture.py --telegram`
+> **`setup_telegram.bat` 더블클릭** (또는 `python setup_capture.py --telegram`)
 
 ## 2. 준비 작업 (한 번만)
 PowerShell 또는 터미널에서 이 폴더로 이동해서:
@@ -37,8 +37,8 @@ python setup_capture.py
   6. 예약 버튼 (버튼 클릭 뒤 이어서 누를 '예약' 버튼 위치)
 
 > 이미 준비 작업을 마친 경우:
-> - 예약 버튼 영역만 다시 지정하려면 `python setup_capture.py --reserve-click`
-> - 영역 위치는 그대로 두고 **그림만 다시 찍으려면** `python setup_capture.py --recapture`
+> - 예약 버튼 영역만 다시 지정하려면 **`setup_reserve_click.bat` 더블클릭**
+> - 영역 위치는 그대로 두고 **그림만 다시 찍으려면 `setup_recapture.bat` 더블클릭**
 >   (판정이 이상하게 나올 때 먼저 시도해 보세요. 버튼 4개가 전부 '매진'인 화면에서 실행해야 합니다.)
 
 ## 3. 연습 실행 (꼭 먼저 해보세요)
