@@ -68,31 +68,69 @@ class TimingSettingsTests(unittest.TestCase):
 
 
 class JudgeTests(unittest.TestCase):
-    def setUp(self):
-        self.soldout_tpl = make_button("SOLD")
-        self.anchor_tpl = make_button("14:30")
+    """core.decide_buttons()는 이미 계산된 점수(float)만 받는 순수 판정 함수."""
 
-    def score(self, screen, tpl):
-        return core.match_score(screen, tpl)
+    def test_all_soldout_is_soldout(self):
+        state, available = core.decide_buttons(1.0, [1.0, 1.0, 1.0, 1.0], 0.9)
+        self.assertEqual(state, "soldout")
+        self.assertEqual(available, [])
 
-    def test_soldout_screen_detected(self):
-        a = self.score(embed(self.anchor_tpl), self.anchor_tpl)
-        s = self.score(embed(self.soldout_tpl), self.soldout_tpl)
-        self.assertEqual(core.decide(a, s, 0.9), "soldout")
+    def test_one_button_available(self):
+        state, available = core.decide_buttons(1.0, [1.0, 1.0, 0.2, 1.0], 0.9)
+        self.assertEqual(state, "available")
+        self.assertEqual(available, [2])
 
-    def test_available_screen_detected(self):
-        a = self.score(embed(self.anchor_tpl), self.anchor_tpl)
-        s = self.score(embed(make_button("BOOK")), self.soldout_tpl)
-        self.assertEqual(core.decide(a, s, 0.9), "available")
+    def test_multiple_available_returns_priority_order(self):
+        # 1번(인덱스 0)과 3번(인덱스 2)이 동시에 매진 아님 -> 앞 번호부터 오름차순으로 반환
+        state, available = core.decide_buttons(1.0, [0.2, 1.0, 0.3, 1.0], 0.9)
+        self.assertEqual(state, "available")
+        self.assertEqual(available, [0, 2])
 
-    def test_wrong_page_is_unknown(self):
-        blank = np.full((64, 144), 255, dtype=np.uint8)
-        a = self.score(blank, self.anchor_tpl)
-        s = self.score(blank, self.soldout_tpl)
-        self.assertEqual(core.decide(a, s, 0.9), "unknown")
+    def test_anchor_invalid_is_unknown_regardless_of_buttons(self):
+        state, available = core.decide_buttons(0.1, [0.2, 0.2, 0.2, 0.2], 0.9)
+        self.assertEqual(state, "unknown")
+        self.assertEqual(available, [])
 
     def test_screen_smaller_than_template(self):
-        self.assertEqual(core.match_score(np.zeros((5, 5), np.uint8), self.anchor_tpl), 0.0)
+        tpl = make_button("14:30")
+        self.assertEqual(core.match_score(np.zeros((5, 5), np.uint8), tpl), 0.0)
+
+
+class CheckButtonsTests(unittest.TestCase):
+    """core.check_buttons()는 화면 캡처(core.grab_gray)를 실제 이미지 비교(match_score)와 연결하는 부분.
+    버튼마다 크기/글자가 다를 수 있으므로 각자 자기 템플릿과만 비교해야 한다."""
+
+    def setUp(self):
+        # 버튼마다 서로 다른 "매진" 템플릿 (버튼 크기가 달라도 정확히 매칭되는지 확인하기 위함)
+        self.soldout_tpls = [make_button(f"SOLD{i}") for i in range(4)]
+        self.anchor_tpl = make_button("14:30")
+        self.cfg = {
+            "anchor_region": [0, 0, 10, 10],
+            "button_regions": [[0, 0, 10, 10]] * 4,
+            "search_padding": 0,
+            "match_threshold": 0.9,
+        }
+
+    def test_one_button_available_end_to_end(self):
+        # 버튼 3(인덱스 2)만 자기 템플릿("SOLD2")과 다른 글자("BOOK")가 나옴 -> 매진 아님
+        screens = iter([embed(self.anchor_tpl)] + [
+            embed(make_button(t)) for t in ("SOLD0", "SOLD1", "BOOK", "SOLD3")
+        ])
+        with mock.patch("core.grab_gray", side_effect=lambda region, pad=0: next(screens)):
+            state, anchor, soldout_scores, available = core.check_buttons(self.cfg, self.soldout_tpls, self.anchor_tpl)
+        self.assertEqual(state, "available")
+        self.assertEqual(available, [2])
+        self.assertEqual(len(soldout_scores), 4)
+        self.assertGreaterEqual(anchor, 0.9)
+
+    def test_all_match_own_template_is_soldout(self):
+        screens = iter([embed(self.anchor_tpl)] + [
+            embed(make_button(f"SOLD{i}")) for i in range(4)
+        ])
+        with mock.patch("core.grab_gray", side_effect=lambda region, pad=0: next(screens)):
+            state, anchor, soldout_scores, available = core.check_buttons(self.cfg, self.soldout_tpls, self.anchor_tpl)
+        self.assertEqual(state, "soldout")
+        self.assertEqual(available, [])
 
 
 class TelegramTests(unittest.TestCase):

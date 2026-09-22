@@ -12,7 +12,7 @@ import requests
 
 BASE = Path(__file__).parent
 CONFIG_PATH = BASE / "config.json"
-SOLDOUT_IMG = BASE / "ref_soldout.png"  # "매진" 상태일 때의 버튼 칸 그림
+SOLDOUT_IMGS = [BASE / f"ref_soldout_{i}.png" for i in range(1, 5)]  # 버튼 1~4번 각각의 "매진" 그림
 ANCHOR_IMG = BASE / "ref_anchor.png"    # 열차 시간 등 항상 보여야 하는 칸 그림
 
 TIMING_PATH = BASE / "시간설정.json"  # 시간 관련 값은 전부 이 파일에서만 읽음
@@ -33,10 +33,9 @@ DEFAULT_TIMING = {
 
 DEFAULT_CONFIG = {
     "telegram": {"bot_token": "", "chat_id": ""},
-    "soldout_region": None,  # [왼쪽, 위, 너비, 높이]
-    "anchor_region": None,
-    "click_region": None,
-    "click_region2": None,  # 첫 클릭 뒤에 이어서 누를 두 번째 영역
+    "anchor_region": None,  # [왼쪽, 위, 너비, 높이] - 화면이 정상인지 확인하는 기준 칸
+    "button_regions": [None, None, None, None],  # 버튼 1~4번 (앞 번호가 우선순위 높음)
+    "reserve_region": None,  # 예약 버튼
     "match_threshold": 0.9,
     "max_unknown_in_row": 5,
     "search_padding": 12,  # 화면이 살짝 움직여도 찾을 수 있게 넓히는 여유(픽셀)
@@ -155,20 +154,27 @@ def match_score(screen_gray, template_gray):
     return float(np.nan_to_num(result.max(), nan=0.0, posinf=0.0, neginf=0.0))
 
 
-def decide(anchor_score, soldout_score, threshold):
-    """판정: 'unknown'(화면이 이상함) / 'soldout'(매진) / 'available'(예약 가능 추정)."""
+def decide_buttons(anchor_score, soldout_scores, threshold):
+    """판정: 'unknown'(화면이 이상함) / 'soldout'(버튼 4개 다 매진) / 'available'(하나 이상 매진 아님).
+    'available'일 때는 매진 아닌 버튼들의 인덱스를 번호 순서(앞 번호=우선순위 높음)대로 돌려줌."""
     if anchor_score < threshold:
-        return "unknown"
-    if soldout_score >= threshold:
-        return "soldout"
-    return "available"
+        return "unknown", []
+    available = [i for i, score in enumerate(soldout_scores) if score < threshold]
+    if not available:
+        return "soldout", []
+    return "available", available
 
 
-def check_screen(cfg, soldout_tpl, anchor_tpl):
+def check_buttons(cfg, soldout_tpls, anchor_tpl):
+    """soldout_tpls: 버튼 1~4번 각각의 '매진' 템플릿(그림) 리스트. 버튼마다 자기 그림과만 비교함."""
     pad = cfg["search_padding"]
     anchor = match_score(grab_gray(cfg["anchor_region"], pad), anchor_tpl)
-    soldout = match_score(grab_gray(cfg["soldout_region"], pad), soldout_tpl)
-    return decide(anchor, soldout, cfg["match_threshold"]), anchor, soldout
+    soldout_scores = [
+        match_score(grab_gray(region, pad), tpl)
+        for region, tpl in zip(cfg["button_regions"], soldout_tpls)
+    ]
+    state, available = decide_buttons(anchor, soldout_scores, cfg["match_threshold"])
+    return state, anchor, soldout_scores, available
 
 
 # ---------- 텔레그램 ----------
