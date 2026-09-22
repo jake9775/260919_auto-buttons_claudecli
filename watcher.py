@@ -64,7 +64,20 @@ def wait_before_next_f5(cfg, round_no):
     core.interruptible_sleep(wait)
 
 
-def run(cfg, soldout_tpls, anchor_tpl):
+def popup_enabled(cfg):
+    return bool(cfg["popup_anchor_region"] and cfg["popup_confirm_region"] and core.POPUP_IMG.exists())
+
+
+def handle_popup(cfg, popup_tpl):
+    """(선택 기능) 예약 버튼을 누른 뒤 안내 팝업이 떴으면 '확인'까지 눌러줌."""
+    core.interruptible_sleep(cfg["popup_check_delay"])
+    if not core.check_popup(cfg, popup_tpl):
+        return
+    x, y = click_random_point(cfg, cfg["popup_confirm_region"])
+    say(f"안내 팝업 감지 → 확인 버튼 ({x}, {y}) 클릭")
+
+
+def run(cfg, soldout_tpls, anchor_tpl, popup_tpl=None):
     unknown_in_row = 0
     round_no = 0
     while True:
@@ -100,23 +113,29 @@ def run(cfg, soldout_tpls, anchor_tpl):
 
         # available: 여러 버튼이 동시에 풀렸으면 번호가 가장 빠른 것을 우선
         target_idx = available[0]
-        say(f"#{round_no} {target_idx + 1}번 버튼이 매진 아닌 것으로 보임 → 재확인")
+        avail_nums = ", ".join(f"{i + 1}번" for i in available)
+        say(f"#{round_no} 매진 아닌 버튼: {avail_nums} → {target_idx + 1}번 우선 클릭 예정, 재확인 중")
 
         # 화면이 넘어가는 중일 수 있으니 잠시 뒤 그 버튼만 한 번 더 확인
         core.interruptible_sleep(cfg["recheck_delay"])
-        state2, _, soldout_scores2, _ = core.check_buttons(cfg, soldout_tpls, anchor_tpl)
+        state2, _, soldout_scores2, available2 = core.check_buttons(cfg, soldout_tpls, anchor_tpl)
         still_available = state2 == "available" and soldout_scores2[target_idx] < cfg["match_threshold"]
         if not still_available:
             say("재확인에서 예약 가능이 아니어서 계속 감시합니다.")
             wait_before_next_f5(cfg, round_no)
             continue
 
+        avail_nums2 = ", ".join(f"{i + 1}번" for i in available2) if available2 else f"{target_idx + 1}번"
         x, y = click_random_point(cfg, cfg["button_regions"][target_idx])
-        say(f"{target_idx + 1}번 버튼 예약 가능! ({x}, {y}) 클릭")
+        say(f"{target_idx + 1}번 버튼 예약 가능! (매진 아닌 버튼: {avail_nums2}) ({x}, {y}) 클릭")
         core.interruptible_sleep(core.rand_between(cfg["second_click_delay"]))
         x2, y2 = click_random_point(cfg, cfg["reserve_region"])
         say(f"예약 버튼 ({x2}, {y2}) 클릭")
-        ok = core.send_telegram(cfg, f"🚄 {target_idx + 1}번 버튼 예약 가능해 보입니다! 두 영역을 클릭했습니다. 지금 크롬 화면을 확인하세요. ({datetime.now():%H:%M:%S})")
+
+        if popup_tpl is not None:
+            handle_popup(cfg, popup_tpl)
+
+        ok = core.send_telegram(cfg, f"🚄 {target_idx + 1}번 버튼 예약 가능해 보입니다! (매진 아닌 버튼: {avail_nums2}) 두 영역을 클릭했습니다. 지금 크롬 화면을 확인하세요. ({datetime.now():%H:%M:%S})")
         say("텔레그램 알림 전송 " + ("성공" if ok else "실패"))
         return
 
@@ -130,12 +149,18 @@ def main():
     validate(cfg)
     soldout_tpls = [core.load_gray(p) for p in core.SOLDOUT_IMGS]
     anchor_tpl = core.load_gray(core.ANCHOR_IMG)
+    popup_tpl = core.load_gray(core.POPUP_IMG) if popup_enabled(cfg) else None
+    if popup_tpl is not None:
+        say("안내 팝업 확인 기능이 켜져 있습니다 (예약 버튼 클릭 후 자동으로 '확인'까지 누름).")
 
     say(f"{cfg['start_delay']}초 뒤에 시작합니다. 크롬 예매 화면을 맨 앞에 두세요. (Esc로 중지)")
     core.interruptible_sleep(cfg["start_delay"])
 
     try:
-        (dry_run if args.dry_run else run)(cfg, soldout_tpls, anchor_tpl)
+        if args.dry_run:
+            dry_run(cfg, soldout_tpls, anchor_tpl)
+        else:
+            run(cfg, soldout_tpls, anchor_tpl, popup_tpl)
     except core.StopRequested:
         say("Esc가 눌려 중지했습니다.")
     except pyautogui.FailSafeException:

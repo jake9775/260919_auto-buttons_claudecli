@@ -57,6 +57,31 @@ def pick_reserve_click(cfg):
     print("\n✅ 예약 버튼 영역 저장 완료.")
 
 
+def pick_popup_click(cfg):
+    """(선택 기능) 예약 버튼을 누른 뒤 뜰 수 있는 '이용안내' 같은 팝업의 확인 버튼을 지정."""
+    cfg["popup_anchor_region"] = pick_region(
+        "안내 팝업 기준 칸",
+        "예약 버튼을 누른 뒤 뜨는 '이용안내' 같은 팝업에서, 그 팝업이 떠야만 보이는 글자 부분을 감쌉니다.\n"
+        "(팝업이 실제로 떠 있는지 확인하는 용도입니다.)",
+    )
+    cfg["popup_confirm_region"] = pick_region(
+        "안내 팝업의 '확인' 버튼",
+        "그 팝업 안의 '확인' 버튼 영역을 감쌉니다.",
+    )
+    core.save_config(cfg)
+
+    print(f"\n{cfg['capture_delay']}초 뒤에 화면을 캡처합니다. 그동안 '이용안내' 팝업이 뜬 상태로 두세요.")
+    for s in range(cfg["capture_delay"], 0, -1):
+        print(f"  {s}초 뒤 캡처...", end="\r", flush=True)
+        time.sleep(1)
+    print("  캡처합니다!            ")
+
+    shot = np.array(pyautogui.screenshot(region=tuple(cfg["popup_anchor_region"])))
+    cv2.imwrite(str(core.POPUP_IMG), cv2.cvtColor(shot, cv2.COLOR_RGB2BGR))
+
+    print("\n✅ 안내 팝업 영역 저장 완료. 팝업이 뜨면 자동으로 '확인'까지 눌러줍니다.")
+
+
 def capture_templates(cfg):
     """이미 지정된 영역(anchor_region/button_regions) 그대로, 그림만 다시 찍어서 저장."""
     print(f"\n{cfg['capture_delay']}초 뒤에 화면을 캡처합니다. 그동안 크롬 화면을 버튼 4개 전부 '매진' 상태로 두고,")
@@ -90,6 +115,13 @@ def main():
         print("       (검은 창이 그 위치를 가리지 않게 구석으로 옮겨 두세요.)")
         input("준비되면 Enter: ")
         pick_reserve_click(cfg)
+        return
+
+    if "--popup-click" in sys.argv:
+        print("[안내] '예약' 버튼을 눌렀을 때 뜨는 '이용안내' 팝업을 화면에 띄워 두세요.")
+        print("       (검은 창이 그 위치를 가리지 않게 구석으로 옮겨 두세요.)")
+        input("준비되면 Enter: ")
+        pick_popup_click(cfg)
         return
 
     if "--recapture" in sys.argv:

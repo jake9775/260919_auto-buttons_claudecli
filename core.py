@@ -14,6 +14,7 @@ BASE = Path(__file__).parent
 CONFIG_PATH = BASE / "config.json"
 SOLDOUT_IMGS = [BASE / f"ref_soldout_{i}.png" for i in range(1, 5)]  # 버튼 1~4번 각각의 "매진" 그림
 ANCHOR_IMG = BASE / "ref_anchor.png"    # 열차 시간 등 항상 보여야 하는 칸 그림
+POPUP_IMG = BASE / "ref_popup.png"      # (선택) 예약 버튼 클릭 후 뜰 수 있는 안내 팝업 확인용 그림
 
 TIMING_PATH = BASE / "시간설정.json"  # 시간 관련 값은 전부 이 파일에서만 읽음
 
@@ -29,6 +30,7 @@ DEFAULT_TIMING = {
     "chrome_retry_delay": 5,
     "dry_run_interval": 3,
     "capture_delay": 5,
+    "popup_check_delay": 1,  # 예약 버튼 클릭 후 안내 팝업이 떴는지 확인하기까지 대기
 }
 
 DEFAULT_CONFIG = {
@@ -36,6 +38,8 @@ DEFAULT_CONFIG = {
     "anchor_region": None,  # [왼쪽, 위, 너비, 높이] - 화면이 정상인지 확인하는 기준 칸
     "button_regions": [None, None, None, None],  # 버튼 1~4번 (앞 번호가 우선순위 높음)
     "reserve_region": None,  # 예약 버튼
+    "popup_anchor_region": None,  # (선택) 안내 팝업이 떴는지 확인하는 칸
+    "popup_confirm_region": None,  # (선택) 안내 팝업의 '확인' 버튼
     "match_threshold": 0.9,
     "max_unknown_in_row": 5,
     "search_padding": 12,  # 화면이 살짝 움직여도 찾을 수 있게 넓히는 여유(픽셀)
@@ -175,6 +179,13 @@ def check_buttons(cfg, soldout_tpls, anchor_tpl):
     ]
     state, available = decide_buttons(anchor, soldout_scores, cfg["match_threshold"])
     return state, anchor, soldout_scores, available
+
+
+def check_popup(cfg, popup_tpl):
+    """(선택 기능) 예약 버튼 클릭 후 안내 팝업이 떠 있는지 확인."""
+    pad = cfg["search_padding"]
+    score = match_score(grab_gray(cfg["popup_anchor_region"], pad), popup_tpl)
+    return score >= cfg["match_threshold"]
 
 
 # ---------- 텔레그램 ----------

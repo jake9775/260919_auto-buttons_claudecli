@@ -87,6 +87,45 @@ class ButtonClickTests(unittest.TestCase):
         self.assertTrue(self.inside(clicks[0], BUTTON_REGIONS[0]))
 
 
+POPUP_REGION = [500, 600, 40, 20]
+
+
+class PopupTests(unittest.TestCase):
+    """(선택 기능) 예약 버튼 클릭 후 안내 팝업이 뜨면 확인 버튼까지 누르는지 확인."""
+
+    def run_flow(self, popup_detected):
+        moves, clicks = [], []
+        seq = iter([fake_result("available", [0]), fake_result("available", [0])])
+        cfg = make_cfg()
+        cfg["popup_anchor_region"] = [900, 900, 10, 10]
+        cfg["popup_confirm_region"] = POPUP_REGION
+        with mock.patch("watcher.core.is_chrome_foreground", return_value=True), \
+                mock.patch("watcher.core.check_buttons", side_effect=lambda *a: next(seq)), \
+                mock.patch("watcher.core.check_popup", return_value=popup_detected), \
+                mock.patch("watcher.core.interruptible_sleep"), \
+                mock.patch("watcher.time.sleep"), \
+                mock.patch("watcher.pyautogui.press"), \
+                mock.patch("watcher.pyautogui.moveTo", side_effect=lambda x, y, **k: moves.append((x, y))), \
+                mock.patch("watcher.pyautogui.click", side_effect=lambda: clicks.append(moves[-1])), \
+                mock.patch("watcher.core.send_telegram", return_value=True), \
+                mock.patch("watcher.say"):
+            watcher.run(cfg, None, None, popup_tpl=object())
+        return clicks
+
+    def inside(self, point, region):
+        l, t, w, h = region
+        return l <= point[0] < l + w and t <= point[1] < t + h
+
+    def test_clicks_confirm_when_popup_detected(self):
+        clicks = self.run_flow(popup_detected=True)
+        self.assertEqual(len(clicks), 3)  # 버튼 + 예약 + 팝업 확인
+        self.assertTrue(self.inside(clicks[2], POPUP_REGION))
+
+    def test_no_extra_click_when_popup_not_detected(self):
+        clicks = self.run_flow(popup_detected=False)
+        self.assertEqual(len(clicks), 2)  # 버튼 + 예약만
+
+
 class OrderTests(unittest.TestCase):
     def test_order_f5_then_judge_then_random_wait_then_f5(self):
         events = []
