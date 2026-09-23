@@ -38,6 +38,7 @@ class ButtonClickTests(unittest.TestCase):
         seq = iter(fake_result(*r) for r in results)
         with mock.patch("watcher.core.is_chrome_foreground", return_value=True), \
                 mock.patch("watcher.core.check_buttons", side_effect=lambda *a: next(seq)), \
+                mock.patch("watcher.core.anchor_score", return_value=1.0), \
                 mock.patch("watcher.core.interruptible_sleep"), \
                 mock.patch("watcher.time.sleep"), \
                 mock.patch("watcher.pyautogui.press") as press, \
@@ -101,6 +102,7 @@ class PopupTests(unittest.TestCase):
         cfg["popup_confirm_region"] = POPUP_REGION
         with mock.patch("watcher.core.is_chrome_foreground", return_value=True), \
                 mock.patch("watcher.core.check_buttons", side_effect=lambda *a: next(seq)), \
+                mock.patch("watcher.core.anchor_score", return_value=1.0), \
                 mock.patch("watcher.core.check_popup", return_value=popup_detected), \
                 mock.patch("watcher.core.interruptible_sleep"), \
                 mock.patch("watcher.time.sleep"), \
@@ -131,19 +133,64 @@ class OrderTests(unittest.TestCase):
         events = []
         seq = iter([fake_result("soldout"), fake_result("available", [0]), fake_result("available", [0])])
         cfg = make_cfg()
-        cfg["judge_delay"] = 2
+        cfg["load_check_interval"] = 0.5
+        cfg["after_load_delay"] = {"min": 1, "max": 1}
         cfg["wait_seconds"] = {"min": 33, "max": 33}
         cfg["recheck_delay"] = 7
         with mock.patch("watcher.core.is_chrome_foreground", return_value=True), \
                 mock.patch("watcher.core.check_buttons", side_effect=lambda *a: (events.append("판단"), next(seq))[1]), \
+                mock.patch("watcher.core.anchor_score", side_effect=lambda *a: (events.append("기준칸"), 1.0)[1]), \
                 mock.patch("watcher.core.interruptible_sleep", side_effect=lambda s: events.append(f"대기{s:g}")), \
                 mock.patch("watcher.time.sleep"), \
                 mock.patch("watcher.pyautogui.press", side_effect=lambda k: events.append("F5")), \
                 mock.patch("watcher.pyautogui.moveTo"), mock.patch("watcher.pyautogui.click"), \
                 mock.patch("watcher.core.send_telegram", return_value=True), mock.patch("watcher.say"):
             watcher.run(cfg, None, None)
-        # 매진이면: F5 -> 2초 -> 판단 -> 33초 -> F5 -> 2초 -> 판단(가능) -> 7초 -> 재확인
-        self.assertEqual(events[:8], ["F5", "대기2", "판단", "대기33", "F5", "대기2", "판단", "대기7"])
+        # 매진이면: F5 -> 0.5초 -> 기준칸 확인(보임) -> 1초 -> 판단 -> 33초 -> F5 -> ... -> 판단(가능) -> 7초 -> 재확인
+        self.assertEqual(events[:12], ["F5", "대기0.5", "기준칸", "대기1", "판단", "대기33",
+                                       "F5", "대기0.5", "기준칸", "대기1", "판단", "대기7"])
+
+
+class LoadWaitTests(unittest.TestCase):
+    """F5 뒤 기준 칸이 보일 때까지 0.5초마다 확인하는 부분."""
+
+    def run_flow(self, anchor_scores, results):
+        events, clock = [], [0.0]
+
+        def fake_sleep(s):
+            clock[0] += s
+            events.append(f"대기{s:g}")
+
+        scores = iter(anchor_scores)
+        seq = iter(fake_result(*r) for r in results)
+        cfg = make_cfg()
+        cfg["after_load_delay"] = {"min": 1, "max": 1}
+        with mock.patch("watcher.core.is_chrome_foreground", return_value=True), \
+                mock.patch("watcher.core.anchor_score", side_effect=lambda *a: (events.append("기준칸"), next(scores))[1]), \
+                mock.patch("watcher.core.check_buttons", side_effect=lambda *a: (events.append("판단"), next(seq))[1]), \
+                mock.patch("watcher.core.interruptible_sleep", side_effect=fake_sleep), \
+                mock.patch("watcher.time.monotonic", side_effect=lambda: clock[0]), \
+                mock.patch("watcher.time.sleep"), \
+                mock.patch("watcher.pyautogui.press", side_effect=lambda k: events.append("F5")), \
+                mock.patch("watcher.pyautogui.moveTo"), mock.patch("watcher.pyautogui.click"), \
+                mock.patch("watcher.core.send_telegram", return_value=True) as tg, \
+                mock.patch("watcher.say"):
+            watcher.run(cfg, None, None)
+        return events, tg
+
+    def test_checks_again_every_half_second_until_anchor_visible(self):
+        events, _ = self.run_flow([0.1, 0.17, 1.0], [("available", [0]), ("available", [0])])
+        # 안 보임 -> 0.5초 뒤 다시 -> 안 보임 -> 0.5초 뒤 다시 -> 보임 -> 1초 -> 판단
+        self.assertEqual(events[:9], ["F5", "대기0.5", "기준칸", "대기0.5", "기준칸",
+                                      "대기0.5", "기준칸", "대기1", "판단"])
+
+    def test_telegram_and_stop_when_not_visible_for_60_seconds(self):
+        events, tg = self.run_flow([0.1] * 1000, [])
+        self.assertNotIn("판단", events)  # 화면이 안 떴으니 매진 판단은 하지 않음
+        self.assertEqual(events.count("F5"), 1)  # 다시 F5 누르지 않고 멈춤
+        self.assertEqual(events.count("기준칸"), 120)  # 0.5초마다 60초 = 120번 확인
+        self.assertEqual(tg.call_count, 1)
+        self.assertIn("60초", tg.call_args[0][1])
 
 
 if __name__ == "__main__":

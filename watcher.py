@@ -1,4 +1,4 @@
-"""메인 프로그램: F5 → 랜덤 대기 → 매진 판단 → (가능하면) 클릭 + 텔레그램 알림.
+"""메인 프로그램: F5 → 화면이 뜰 때까지 확인 → 매진 판단 → (가능하면) 클릭 + 텔레그램 알림.
 
 사용법:
     python watcher.py            실제 실행
@@ -64,6 +64,23 @@ def wait_before_next_f5(cfg, round_no):
     core.interruptible_sleep(wait)
 
 
+def wait_page_loaded(cfg, anchor_tpl, round_no):
+    """F5 뒤 load_check_interval마다 기준 칸을 확인. 보이면 after_load_delay만큼 더 기다리고 True,
+    load_timeout이 지나도 안 보이면 False."""
+    deadline = time.monotonic() + cfg["load_timeout"]
+    while True:
+        core.interruptible_sleep(cfg["load_check_interval"])
+        score = core.anchor_score(cfg, anchor_tpl)
+        if score >= cfg["match_threshold"]:
+            break
+        if time.monotonic() >= deadline:
+            return False
+    wait = core.rand_between(cfg["after_load_delay"])
+    say(f"#{round_no} 화면 뜸 (기준칸 {score:.2f}) → {wait:.3f}초 뒤 판단")
+    core.interruptible_sleep(wait)
+    return True
+
+
 def popup_enabled(cfg):
     return bool(cfg["popup_anchor_region"] and cfg["popup_confirm_region"] and core.POPUP_IMG.exists())
 
@@ -89,8 +106,12 @@ def run(cfg, soldout_tpls, anchor_tpl, popup_tpl=None):
             refreshed = False
         else:
             pyautogui.press("f5")
-            say(f"#{round_no} F5 누름 → {cfg['judge_delay']}초 뒤 판단")
-            core.interruptible_sleep(cfg["judge_delay"])
+            say(f"#{round_no} F5 누름 → 화면이 뜨는지 {cfg['load_check_interval']}초마다 확인")
+            if not wait_page_loaded(cfg, anchor_tpl, round_no):
+                core.send_telegram(cfg, f"⚠️ 기차표 감시 중단: F5 후 {cfg['load_timeout']}초가 지나도 화면이 뜨지 않습니다. "
+                                        "크롬 화면을 확인해 주세요.")
+                say(f"F5 후 {cfg['load_timeout']}초가 지나도 화면이 뜨지 않아 중지합니다.")
+                return
             state, anchor, _, available = core.check_buttons(cfg, soldout_tpls, anchor_tpl)
             say(f"#{round_no} 판정={state} (기준칸 {anchor:.2f})")
             refreshed = True

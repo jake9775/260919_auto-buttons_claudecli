@@ -43,7 +43,7 @@ class TimingSettingsTests(unittest.TestCase):
     def test_shipped_timing_file_is_valid_and_loaded(self):
         cfg = core.load_config()
         self.assertEqual(core.timing_errors(cfg), [])
-        self.assertIn("judge_delay", cfg)  # 사용자가 값을 바꿔도 통과하도록 값 자체는 검사하지 않음
+        self.assertIn("load_timeout", cfg)  # 사용자가 값을 바꿔도 통과하도록 값 자체는 검사하지 않음
 
     def test_timing_file_overrides_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:

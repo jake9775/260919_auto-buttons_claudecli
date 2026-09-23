@@ -21,7 +21,9 @@ TIMING_PATH = BASE / "시간설정.json"  # 시간 관련 값은 전부 이 파�
 # 시간설정.json 이 없거나 항목이 빠졌을 때 쓰는 기본값
 DEFAULT_TIMING = {
     "start_delay": 5,
-    "judge_delay": 2,
+    "load_check_interval": 0.5,  # F5 뒤 기준 칸이 보이는지 확인하는 간격
+    "after_load_delay": {"min": 0.9, "max": 1.3},  # 기준 칸이 보인 뒤 매진 판단까지 랜덤 대기
+    "load_timeout": 60,  # F5 뒤 이 시간이 지나도 기준 칸이 안 보이면 텔레그램 알림 후 중지
     "wait_seconds": {"min": 30, "max": 60},
     "recheck_delay": 2,
     "mouse_move_duration": {"min": 0.4, "max": 1.0},
@@ -133,7 +135,7 @@ def interruptible_sleep(seconds):
     while time.time() < end:
         if esc_pressed():
             raise StopRequested()
-        time.sleep(0.2)
+        time.sleep(max(0.0, min(0.2, end - time.time())))
 
 
 # ---------- 화면 비교 ----------
@@ -169,10 +171,15 @@ def decide_buttons(anchor_score, soldout_scores, threshold):
     return "available", available
 
 
+def anchor_score(cfg, anchor_tpl):
+    """기준 칸이 지금 화면에 보이는 정도 (0~1)."""
+    return match_score(grab_gray(cfg["anchor_region"], cfg["search_padding"]), anchor_tpl)
+
+
 def check_buttons(cfg, soldout_tpls, anchor_tpl):
     """soldout_tpls: 버튼 1~4번 각각의 '매진' 템플릿(그림) 리스트. 버튼마다 자기 그림과만 비교함."""
     pad = cfg["search_padding"]
-    anchor = match_score(grab_gray(cfg["anchor_region"], pad), anchor_tpl)
+    anchor = anchor_score(cfg, anchor_tpl)
     soldout_scores = [
         match_score(grab_gray(region, pad), tpl)
         for region, tpl in zip(cfg["button_regions"], soldout_tpls)
