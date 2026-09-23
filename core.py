@@ -23,7 +23,7 @@ DEFAULT_TIMING = {
     "start_delay": 5,
     "load_check_interval": 0.5,  # F5 뒤 기준 칸이 보이는지 확인하는 간격
     "after_load_delay": {"min": 0.9, "max": 1.3},  # 기준 칸이 보인 뒤 매진 판단까지 랜덤 대기
-    "load_timeout": 60,  # F5 뒤 이 시간이 지나도 기준 칸이 안 보이면 텔레그램 알림 후 중지
+    "load_timeout": 60,  # F5 뒤 이 시간이 지나도 기준 칸이 안 보이면 다시 F5
     "wait_seconds": {"min": 30, "max": 60},
     "recheck_delay": 2,
     "mouse_move_duration": {"min": 0.4, "max": 1.0},

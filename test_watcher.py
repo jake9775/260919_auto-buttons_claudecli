@@ -165,6 +165,8 @@ class LoadWaitTests(unittest.TestCase):
         seq = iter(fake_result(*r) for r in results)
         cfg = make_cfg()
         cfg["after_load_delay"] = {"min": 1, "max": 1}
+        cfg["load_check_interval"] = 0.5
+        cfg["load_timeout"] = 60  # 사용자가 시간설정.json 값을 바꿔도 테스트는 고정 값으로
         with mock.patch("watcher.core.is_chrome_foreground", return_value=True), \
                 mock.patch("watcher.core.anchor_score", side_effect=lambda *a: (events.append("기준칸"), next(scores))[1]), \
                 mock.patch("watcher.core.check_buttons", side_effect=lambda *a: (events.append("판단"), next(seq))[1]), \
@@ -184,13 +186,16 @@ class LoadWaitTests(unittest.TestCase):
         self.assertEqual(events[:9], ["F5", "대기0.5", "기준칸", "대기0.5", "기준칸",
                                       "대기0.5", "기준칸", "대기1", "판단"])
 
-    def test_telegram_and_stop_when_not_visible_for_60_seconds(self):
-        events, tg = self.run_flow([0.1] * 1000, [])
-        self.assertNotIn("판단", events)  # 화면이 안 떴으니 매진 판단은 하지 않음
-        self.assertEqual(events.count("F5"), 1)  # 다시 F5 누르지 않고 멈춤
-        self.assertEqual(events.count("기준칸"), 120)  # 0.5초마다 60초 = 120번 확인
-        self.assertEqual(tg.call_count, 1)
-        self.assertIn("60초", tg.call_args[0][1])
+    def test_press_f5_again_without_telegram_when_not_visible_for_60_seconds(self):
+        # 0.5초마다 60초 = 120번 확인해도 안 보임 -> 알림 없이 바로 다시 F5 -> 이번엔 바로 보임
+        events, tg = self.run_flow([0.1] * 120 + [1.0], [("available", [0]), ("available", [0])])
+        first_f5_round = events[:events.index("F5", 1)]
+        self.assertEqual(first_f5_round.count("기준칸"), 120)
+        self.assertNotIn("판단", first_f5_round)  # 화면이 안 떴으니 매진 판단은 하지 않음
+        self.assertEqual(events.count("F5"), 2)
+        self.assertEqual(events[events.index("F5", 1):][:5], ["F5", "대기0.5", "기준칸", "대기1", "판단"])
+        self.assertEqual(tg.call_count, 1)  # 예약 가능 알림 1번뿐 (화면 안 뜬 건 알리지 않음)
+        self.assertNotIn("뜨지 않습니다", tg.call_args[0][1])
 
 
 if __name__ == "__main__":

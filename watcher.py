@@ -108,10 +108,8 @@ def run(cfg, soldout_tpls, anchor_tpl, popup_tpl=None):
             pyautogui.press("f5")
             say(f"#{round_no} F5 누름 → 화면이 뜨는지 {cfg['load_check_interval']}초마다 확인")
             if not wait_page_loaded(cfg, anchor_tpl, round_no):
-                core.send_telegram(cfg, f"⚠️ 기차표 감시 중단: F5 후 {cfg['load_timeout']}초가 지나도 화면이 뜨지 않습니다. "
-                                        "크롬 화면을 확인해 주세요.")
-                say(f"F5 후 {cfg['load_timeout']}초가 지나도 화면이 뜨지 않아 중지합니다.")
-                return
+                say(f"#{round_no} F5 후 {cfg['load_timeout']}초가 지나도 화면이 뜨지 않아 다시 F5")
+                continue
             state, anchor, _, available = core.check_buttons(cfg, soldout_tpls, anchor_tpl)
             say(f"#{round_no} 판정={state} (기준칸 {anchor:.2f})")
             refreshed = True
